@@ -132,7 +132,7 @@ def prettyResult(list){
 
 		def size = 0;
 		v.each {
-			detail += 'sourceId=' +  it.sourceId  + ',pubId='+ it.pubId + ',acceptId=' + it. acceptId
+			detail += 'sourceId=' +  it.sourceId  + ',pubId='+ it.pubId + ',acceptId=' + it. acceptId + '\n'
 			size++;
 		}
 		detail += '\n 共' + size + '笔\n'
