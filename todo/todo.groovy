@@ -9,13 +9,14 @@ import static groovyx.net.http.Method.GET
 import static groovyx.net.http.ContentType.TEXT
 import groovy.json.JsonBuilder
 import java.text.SimpleDateFormat
+import groovy.io.FileType
 
 writers = [:]
 date = new Date().format('yyyy-MM-dd')
 jsonSlurper = new JsonSlurper()
 
 def httpGet(url) {
-	zipfile = String.format('./result%s.zip',date)
+	zipfile = String.format('result%s.zip',date)
 	def stream = new URL(url).openStream();
 	byte[] arr = new byte[1024];
 	def out = new FileOutputStream(zipfile);
@@ -23,36 +24,45 @@ def httpGet(url) {
 	while((len=stream.read(arr))!=-1){
 		out.write(arr,0,len)
 	}
+	out.close()
 	return zipfile;
 }
 
-def initWriter(){
-	writers['T_UndealTodo'] = new File(String.format('./T_UndealTodo%s.json',date));
-	writers['T_DealedTodo'] = new File(String.format('./T_DealedTodo%s.json',date));
-}
-
-def getData(undeal, deal) {
+def getData() {
 	print('\nstart to get undeal data....')
 	def resultList = [];
 	def dealList = [];
-	deal.eachLine("utf8") {
-		if(it != null &&  it !='') {
-			def o = jsonSlurper.parseText(it);
-			dealList << (o.sourceId + ',' + o.appId + ',' + o.acceptId);
+
+	def dir = new File('.')
+	dir.traverse(type:FileType.FILES,
+	    nameFilter:~/.[T_]*DealedTodo[_A-Za-z0-9-]*\.json/) {
+
+	    it.eachLine("utf8") {
+			if(it != null &&  it !='') {
+				def o = jsonSlurper.parseText(it);
+				dealList << (o.sourceId + ',' + o.appId + ',' + o.acceptId);
+			}
 		}
 	}
+	
+	dir.traverse(type:FileType.FILES,
+	    nameFilter:~/.[T_]*UndealTodo[_A-Za-z0-9-]*\.json/) {
 
-	undeal.eachLine("utf8") {
-		if(it != null &&  it !='') {
-			def o = jsonSlurper.parseText(it);
-			def key = o.sourceId + ',' + o.appId + ',' + o.acceptId;
-			if(!dealList.contains(key)) {
-				resultList << o;
+		it.eachLine("utf8") {
+			if(it != null &&  it !='') {
+				def o = jsonSlurper.parseText(it);
+				def key = o.sourceId + ',' + o.appId + ',' + o.acceptId;
+				if(!dealList.contains(key)) {
+					resultList << o;
+				}
 			}
 		}
 	}
 
 	print('\n get undeal data end')
+	if(resultList.size == 0) {
+		print('\n has no data')
+	}
 	return resultList;
 }
 
@@ -75,37 +85,44 @@ def send(content){
 }
 
 def filter(File source) {
-	initWriter();
 
 	if (!source.isDirectory()) {  
    		print 'is not a directory'
    		return;
 	} 
 
+	def writers=[:]
+	writers['T_DealedTodo'] =  new File(String.format('T_DealedTodo_%s.json', date))
+	writers['T_UndealTodo'] =  new File(String.format('T_UndealTodo_%s.json', date))
+	delete(writers['T_DealedTodo'])
+	delete(writers['T_UndealTodo'])
+
+    print 'start to filter...\n'
 	source.eachFileRecurse { it ->  
-		if(it.name.contains(date)) {
-        	print 'find a file: ' + it.name + '\n'
-        	print 'start to filter...'
-			it.eachLine("utf8") {
-				def o = jsonSlurper.parseText(it);
-				writers[o.table].append('\n'+ new JsonBuilder(o),'utf-8');
-			}
-			print '\nfilter success'
+		//if(it.name.contains(date)) {
+		print 'find a file: ' + it.name + '\n'
+		it.eachLine("utf8") {
+			def o = jsonSlurper.parseText(it);
+			writers[o.table].append('\n'+ new JsonBuilder(o),'utf-8');
 		}
+			
+		//}
     }  
+    print '\nfilter success'
 }
 
-def unzip(File file){
+def unzip(File dir){
 	/*def zf = new java.util.zip.ZipFile(file)
 	zf.entries().findAll { !it.directory }.each {
 		println it.name
 	}*/
 	//上面的解压缩失败，尝试使用cmd的方式
-	def output = new File('./' + date)
-	def cmd = '"C:\\Program Files\\7-Zip\\7z.exe" x '+ file + ' -y -aos -o' + output + '/'
-	def proc =cmd.execute() 
-	proc.waitFor()  // 用以等待外部进程调用结束 
-	println proc.exitValue()
+	def output = date + '/'
+
+	dir.traverse(type:FileType.FILES, nameFilter:~/.*\.zip/) {
+		//print String.format('cmd /c 7z.exe x %s -y -aos -o%s',it,output).execute(null, new File("F:\\todomonitor")).text
+		print String.format('cmd /c 7z.exe x %s -y -aos -o%s',it,output).execute().text
+	}
 	return output
 }
 
@@ -113,6 +130,7 @@ df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 df.setTimeZone(TimeZone.getTimeZone("UTC"));
 
 def prettyResult(list){
+	log(list)
 	resultMap = [:]
 	list.each {
 		def hour = df.parse(it.sendTime).getHours();
@@ -131,6 +149,7 @@ def prettyResult(list){
 		detail += k + '时详情如下:\n';
 
 		def size = 0;
+		v.sort();
 		v.each {
 			detail += 'sourceId=' +  it.sourceId  + ',pubId='+ it.pubId + ',acceptId=' + it. acceptId + '\n'
 			size++;
@@ -163,12 +182,25 @@ def prettyResult(list){
 	return builder.toString()
 }
 
+def log(list) {
+	def result = new File('./result.txt')
+	delete(result)
+	list.each {
+		result.append('\n'+ new JsonBuilder(it),'utf-8');
+	}
+}
+
+def delete(File f){
+	if(f.exists()) {
+		f.delete();
+	}
+}
+
 def zipfile = httpGet('http://120.131.8.136:8109/todotongji/'+ date + '_result.json.gz')
-def unzipDir = unzip(new File(zipfile))
+def unzipDir = unzip(new File('.'))
+filter(new File(unzipDir))
 
-filter(unzipDir)
-//filter(new File('./' + date))
-//initWriter();
-
-def resultList = getData(writers['T_UndealTodo'],writers['T_DealedTodo'])
-send(prettyResult(resultList))
+def resultList = getData()
+if(resultList.size() > 0) {
+	send(prettyResult(resultList))
+}
