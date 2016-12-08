@@ -133,12 +133,19 @@ def prettyResult(list){
 	log(list)
 	resultMap = [:]
 	list.each {
-		def hour = df.parse(it.sendTime).getHours();
+		/*def hour = df.parse(it.sendTime).getHours();
 		if(resultMap.get(hour) == null) {
 			def v = []
 			resultMap[hour] = v;
 		}
-		resultMap.get(hour) << it
+		resultMap.get(hour) << it*/
+		
+		def appId = it.appId;
+		if(resultMap.get(appId) == null) {
+			def v = []
+			resultMap[appId] = v;
+		}
+		resultMap.get(appId) << it
 		
 	}
 
@@ -146,18 +153,18 @@ def prettyResult(list){
 	def detail = '\n'
 	resultMap.each {k,v ->
 		//new File('./result.txt').append('\n'+ new JsonBuilder(k + ','+v),'utf-8')
-		detail += k + '时详情如下:\n';
+		detail +='id为' + k + '的应用:\n';
 
 		def size = 0;
-		v.sort();
+
 		v.each {
-			detail += 'sourceId=' +  it.sourceId  + ',pubId='+ it.pubId + ',acceptId=' + it. acceptId + '\n'
+			detail += 'sourceId=' +  it.sourceId  + ',acceptId=' + it. acceptId + '，创建时间' + it.sendTime +'\n'
 			size++;
 		}
-		detail += '\n 共' + size + '笔\n'
+		detail += ' 共' + size + '笔\n'
 	}
 
-	detail =  date + '日，系统有如下的代办没有完成' + detail
+	detail = '截止' + date + '日统计时，系统有' + list.size() + '笔的代办没有完成(by appId统计):\n' + detail
 
 	dataList = [
     	[status:'{"DO": 0,"READ": 0}', personId:'580099c500b0cf1c17fadc9e']
